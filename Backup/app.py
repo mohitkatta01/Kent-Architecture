@@ -28,7 +28,7 @@ with st.form("mapping_form"):
         placeholder="Enter client role here...",
         help="Please enter the client's role or job title (This field is required)"
     )
-    
+
     # Add some spacing
     st.markdown("")
     
