@@ -15,11 +15,12 @@ st.set_page_config(
 st.title("Kent – Indicative Title Mapping")
 st.markdown("---")
 
-# -------------------------- Load BEST Model (cached) --------------------------
+# -------------------------- Load Model (cached) --------------------------
 @st.cache_resource
 def load_model():
-    # Best model for job titles: understands meaning, synonyms, hierarchy
-    return SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+    with st.spinner("Loading AI engine (first time only — ~15 seconds)..."):
+        # Best model for job titles — understands meaning perfectly
+        return SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
 
 model = load_model()
 
@@ -31,8 +32,8 @@ def load_data():
     
     df = df.dropna(how='all').reset_index(drop=True)
     df = df[df["Client Job Title"].notna() & (df["Client Job Title"].str.strip() != "")]
-    
     df.columns = df.columns.str.strip()
+    
     required = ["Client Job Title", "Position Title", "Grade", "Country", "Job Code"]
     if not all(col in df.columns for col in required):
         st.error(f"Missing columns: {required}")
@@ -43,13 +44,12 @@ def load_data():
 
 df = load_data()
 
-# Pre-compute embeddings once (super fast after first load)
+# -------------------------- Pre-compute embeddings (once) --------------------------
 @st.cache_resource
 def get_embeddings():
-    with st.spinner("Preparing smart matching engine... (first load only)"):
-        titles = df["Client Job Title"].tolist()
-        embeddings = model.encode(titles, show_progress_bar=False)
-    return embeddings
+    titles = df["Client Job Title"].tolist()
+    with st.spinner("Building smart search index..."):
+        return model.encode(titles, batch_size=32, show_progress_bar=False)
 
 embeddings = get_embeddings()
 
@@ -64,22 +64,21 @@ with st.form("mapping_form"):
     st.markdown("### Enter Client Job Title")
     client_role = st.text_input(
         "Client Role *",
-        placeholder="e.g. Senior Drilling Engineer, Head of Projects, Lead HSE Advisor"
+        placeholder="e.g. Senior Drilling Engineer, Head of Projects, Lead HSE"
     )
     
-    st.markdown("#### Optional Filters")
     col1, col2 = st.columns(2)
-    grade_options = sorted(df["Grade"].dropna().unique().tolist())
-    country_options = sorted(df["Country"].dropna().unique().tolist())
+    grade_options = sorted(df["Grade"].dropna().unique())
+    country_options = sorted(df["Country"].dropna().unique())
     
     with col1:
-        selected_grade = st.selectbox("Grade", ["All"] + grade_options)
+        selected_grade = st.selectbox("Grade", ["All"] + grade_options.tolist())
     with col2:
-        selected_country = st.selectbox("Country", ["All"] + country_options)
+        selected_country = st.selectbox("Country", ["All"] + country_options.tolist())
 
     submitted = st.form_submit_button("Search Mapping", type="primary", use_container_width=True)
 
-# -------------------------- Smart Search --------------------------
+# -------------------------- AI Search --------------------------
 if submitted:
     if not client_role.strip():
         st.error("Please enter a client role.")
@@ -88,7 +87,7 @@ if submitted:
         st.session_state.client_role = client_role.strip()
         query = client_role.strip()
 
-        # Apply filters first
+        # Filter first
         filtered_df = df.copy()
         if selected_grade != "All":
             filtered_df = filtered_df[filtered_df["Grade"] == selected_grade]
@@ -100,29 +99,25 @@ if submitted:
             st.stop()
 
         # Get query embedding
-        query_emb = model.encode([query], show_progress_bar=False)
+        query_emb = model.encode([query])
 
         # Get embeddings for filtered titles only
         filtered_titles = filtered_df["Client Job Title"].tolist()
-        filtered_embs = model.encode(filtered_titles, show_progress_bar=False)
+        filtered_embs = model.encode(filtered_titles)
 
-        # Compute similarity
-        similarities = cosine_similarity(query_emb, filtered_embs)[0]
-        
-        # Get top 3
-        top_idx = np.argsort(similarities)[-3:][::-1]
-        top_scores = similarities[top_idx]
-        
+        # Cosine similarity
+        sims = cosine_similarity(query_emb, filtered_embs)[0]
+        top_idx = np.argsort(sims)[-3:][::-1]
+
         results = filtered_df.iloc[top_idx].copy()
-        results["Probability"] = [f"{score:.1%}" for score in top_scores]
-        
-        # Exact match override?
-        exact_match = results[results["clean_title"] == query.lower()]
-        if not exact_match.empty:
-            results.loc[exact_match.index, "Probability"] = "100%"
+        results["Probability"] = [f"{s:.1%}" for s in sims[top_idx]]
 
-        display_cols = ["Client Job Title", "Position Title", "Grade", "Country", "Job Code", "Probability"]
-        st.session_state.results = results[display_cols].reset_index(drop=True)
+        # Force 100% on exact match
+        exact_mask = results["clean_title"] == query.lower()
+        results.loc[exact_mask, "Probability"] = "100%"
+
+        cols = ["Client Job Title", "Position Title", "Grade", "Country", "Job Code", "Probability"]
+        st.session_state.results = results[cols].reset_index(drop=True)
 
 # -------------------------- Results --------------------------
 if st.session_state.submitted:
@@ -133,7 +128,7 @@ if st.session_state.submitted:
         if st.session_state.results.iloc[0]["Probability"] == "100%":
             st.success("Exact match found!")
         else:
-            st.info("Powered by AI semantic search – showing best matches:")
+            st.info("AI-powered semantic search — showing best matches:")
         
         st.dataframe(st.session_state.results, use_container_width=True, hide_index=True)
         
@@ -146,6 +141,5 @@ if st.session_state.submitted:
         st.session_state.clear()
         st.rerun()
 
-# -------------------------- Footer --------------------------
 st.markdown("---")
-st.caption("Kent – Indicative Title Mapping • AI-Powered Semantic Search • Live from Google Sheets")
+st.caption("Kent – AI-Powered Job Title Mapping • Live from Google Sheets • Semantic Search")

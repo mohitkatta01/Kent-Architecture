@@ -1,4 +1,4 @@
 streamlit
 pandas
-sentence-transformers==2.7.0
-torch==2.3.0
+sentence-transformers
+scikit-learn
