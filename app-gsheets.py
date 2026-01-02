@@ -14,26 +14,31 @@ st.title("Kent – Indicative Title Mapping")
 st.markdown("---")
 
 # -------------------------- Load Data from Google Sheets --------------------------
-@st.cache_data(ttl=600)  # Refreshes max every 10 minutes
+@st.cache_data(ttl=600)
 def load_data():
-    # Your published Google Sheet CSV URL (kept safe in secrets)
     url = st.secrets["DATA_URL"]
     
     try:
         df = pd.read_csv(url)
     except Exception as e:
-        st.error("Could not load the latest job title database. Please contact the admin.")
+        st.error("Could not load data from Google Sheet.")
         st.stop()
+    
+    # CLEAN UP: Remove completely empty rows and reset index
+    df = df.dropna(how='all').reset_index(drop=True)
+    
+    # Remove rows where "Client Job Title" is missing or blank
+    df = df[df["Client Job Title"].notna()]
+    df = df[df["Client Job Title"].str.strip() != ""]
     
     df.columns = df.columns.str.strip()
     required = ["Client Job Title", "Position Title", "Grade", "Country", "Job Code"]
     if not all(col in df.columns for col in required):
-        st.error(f"Google Sheet is missing columns: {required}")
+        st.error(f"Missing columns: {required}")
         st.stop()
     
-    df = df.dropna(subset=["Client Job Title"]).copy()
     df["clean_title"] = df["Client Job Title"].str.strip().str.lower()
-    return df
+    return df.reset_index(drop=True)  # This line is crucial!
 
 df = load_data()
 
