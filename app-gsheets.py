@@ -80,13 +80,12 @@ if submitted:
         
         query = client_role.strip().lower()
         
-        # Apply filters
-        mask = pd.Series([True] * len(df))
+        # Safe filtering – avoids the IndexingError forever
+        filtered = df.copy()
         if selected_grade != "All":
-            mask &= (df["Grade"] == selected_grade)
+            filtered = filtered[filtered["Grade"] == selected_grade]
         if selected_country != "All":
-            mask &= (df["Country"] == selected_country)
-        filtered = df[mask].copy()
+            filtered = filtered[filtered["Country"] == selected_country]
         
         # Exact match?
         exact = filtered[filtered["clean_title"] == query]
