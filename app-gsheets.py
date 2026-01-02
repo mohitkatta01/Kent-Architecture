@@ -24,7 +24,7 @@ def load_data():
         st.error("Could not load data from Google Sheet.")
         st.stop()
     
-    # CLEAN UP: Remove completely empty rows and reset index
+    # CLEAN UP: Remove completely empty rows
     df = df.dropna(how='all').reset_index(drop=True)
     
     # Remove rows where "Client Job Title" is missing or blank
@@ -38,7 +38,7 @@ def load_data():
         st.stop()
     
     df["clean_title"] = df["Client Job Title"].str.strip().str.lower()
-    return df.reset_index(drop=True)  # This line is crucial!
+    return df.reset_index(drop=True)
 
 df = load_data()
 
@@ -60,8 +60,8 @@ with st.form("mapping_form"):
     st.markdown("#### Optional Filters")
     col1, col2 = st.columns(2)
     
-    grade_options = sorted(df["Grade"].unique().tolist())
-    country_options = sorted(df["Country"].unique().tolist())
+    grade_options = sorted(df["Grade"].dropna().unique().tolist())
+    country_options = sorted(df["Country"].dropna().unique().tolist())
     
     with col1:
         selected_grade = st.selectbox("Grade", ["All"] + grade_options)
@@ -80,7 +80,7 @@ if submitted:
         
         query = client_role.strip().lower()
         
-        # Safe filtering – avoids the IndexingError forever
+        # Safe filtering
         filtered = df.copy()
         if selected_grade != "All":
             filtered = filtered[filtered["Grade"] == selected_grade]
@@ -101,7 +101,9 @@ if submitted:
             results = filtered.iloc[indices].copy()
             results["Probability"] = [f"{s:.1f}%" for s in scores]
         
-        st.session_state.results = results[["Position Title", "Grade", "Country", "Job Code", "Probability"]].reset_index(drop=True)
+        # FINAL RESULTS: Include Client Job Title + reorder columns nicely
+        display_cols = ["Client Job Title", "Position Title", "Grade", "Country", "Job Code", "Probability"]
+        st.session_state.results = results[display_cols].reset_index(drop=True)
 
 # -------------------------- Show Results --------------------------
 if st.session_state.submitted:
@@ -114,10 +116,21 @@ if st.session_state.submitted:
         else:
             st.info("Showing top 3 closest matches:")
         
-        st.dataframe(st.session_state.results, use_container_width=True, hide_index=True)
+        # Beautiful table with Client Job Title first
+        st.dataframe(
+            st.session_state.results,
+            use_container_width=True,
+            hide_index=True
+        )
         
+        # Download with Client Job Title included
         csv = st.session_state.results.to_csv(index=False).encode()
-        st.download_button("Download Results", csv, "kent_title_mapping.csv", "text/csv")
+        st.download_button(
+            "Download Results as CSV",
+            csv,
+            "kent_title_mapping_results.csv",
+            "text/csv"
+        )
     else:
         st.warning("No matches found with current filters.")
     
