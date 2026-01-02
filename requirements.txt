@@ -1,3 +1,4 @@
 streamlit
 pandas
-rapidfuzz
+sentence-transformers==2.7.0
+torch==2.3.0
